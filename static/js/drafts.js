@@ -203,9 +203,26 @@ exports.setup_page = function (callback) {
     populate_and_fill();
 };
 
+exports.open = function () {
+    if ($("#draft_overlay").hasClass("show")) {
+        modals.close_modal("drafts");
+    } else {
+        exports.launch();
+    }
+};
+
 exports.launch = function () {
     exports.setup_page(function () {
         $("#draft_overlay").addClass("show");
+        var draft_list = drafts.draft_model.get();
+        var draft_id_list = Object.getOwnPropertyNames(draft_list);
+        if (draft_id_list.length > 0) {
+            var last_draft = draft_id_list[draft_id_list.length-1];
+            var last_draft_element = document.querySelectorAll('[data-draft-id="' + last_draft + '"]');
+            var focus_element = last_draft_element[0].children[0];
+            focus_element.focus();
+            $(".drafts-list")[0].scrollTop = $('.drafts-list')[0].scrollHeight - $('.drafts-list').height();
+        }
     });
 };
 

@@ -85,6 +85,7 @@ var keypress_mappings = {
     82: {name: 'respond_to_author', message_view_only: true}, // 'R'
     83: {name: 'narrow_by_subject', message_view_only: true}, //'S'
     99: {name: 'compose', message_view_only: true}, // 'c'
+    100: {name: 'open_drafts', message_view_only: false}, // 'd'
     105: {name: 'message_actions', message_view_only: true}, // 'i'
     106: {name: 'vim_down', message_view_only: true}, // 'j'
     107: {name: 'vim_up', message_view_only: true}, // 'k'
@@ -292,7 +293,23 @@ exports.process_enter_key = function (e) {
 
         return false;
     }
-
+    
+    //This handles when pressing enter while looking at drafts.
+    //It restores draft that is focused.
+    if ($("#draft_overlay").hasClass("show")) {
+        var draft_list = drafts.draft_model.get();
+        if (document.activeElement.parentElement.hasAttribute("data-draft-id")) {
+             console.log(document.activeElement);
+             var focused_draft = document.activeElement.parentElement.getAttribute("data-draft-id");
+             drafts.restore_draft(focused_draft);
+        } else {
+            var draft_id_list = Object.getOwnPropertyNames(draft_list);
+            var first_draft = draft_id_list[draft_id_list.length-1];
+            drafts.restore_draft(first_draft);
+        }
+        return true;
+    }
+    
     // If we're on a button or a link and have pressed enter, let the
     // browser handle the keypress
     //
@@ -394,7 +411,103 @@ exports.process_hotkey = function (e, hotkey) {
         case 'esc_ctrl':
             return exports.process_escape_key(e);
     }
+    
+    var draft_arrow = drafts.draft_model.get();
+    var draft_id_arrow = Object.getOwnPropertyNames(draft_arrow); 
 
+    //This detects up arrow key presses when the draft overlay
+    //is open and scrolls through the drafts.
+    if (event_name === "up_arrow") {
+        if ($("#draft_overlay").hasClass("show")) {
+            if ($(".draft-info-box:focus")[0] === undefined) {
+                if (draft_id_arrow.length > 0) {
+                    var last_draft = draft_id_arrow[draft_id_arrow.length-1];
+                    var last_draft_element = document.querySelectorAll('[data-draft-id="' + last_draft + '"]');
+                    var focus_up_element = last_draft_element[0].children[0];
+                    focus_up_element.focus();
+                }
+            }
+            var focus_draft_up_row = $(".draft-info-box:focus")[0].parentElement;
+            var prev_focus_draft_row = $(focus_draft_up_row).prev();
+            if ($(".draft-info-box:first")[0].parentElement == prev_focus_draft_row[0]) {
+                $(".drafts-list")[0].scrollTop = 0;
+            }
+            if(prev_focus_draft_row[0].children[0] !== undefined) {
+                prev_focus_draft_row[0].children[0].focus();
+                //If the next draft is cut off, scroll more.
+                if (prev_focus_draft_row.position().top < 55) { //55 is a hardcoded number that represents
+                                                                //the minimum distance from the top that will require extra scrolling.
+                    $(".drafts-list")[0].scrollTop = $(".drafts-list")[0].scrollTop - (55 - prev_focus_draft_row.position().top);
+                }
+                e.preventDefault();
+            }
+        }
+    }
+
+    //This detects down arrow key presses when the draft overlay
+    //is open and scrolls through the drafts.
+    if (event_name === "down_arrow") {
+        if ($("#draft_overlay").hasClass("show")) {
+            if ($(".draft-info-box:focus")[0] === undefined) {
+                if (draft_id_arrow.length > 0) {
+                    var first_draft = draft_id_arrow[0];
+                    var first_draft_element = document.querySelectorAll('[data-draft-id="' + first_draft + '"]');
+                    var focus_down_element = first_draft_element[0].children[0];
+                    focus_down_element.focus();
+                }
+            }
+            var focus_draft_down_row = $(".draft-info-box:focus")[0].parentElement;
+            var next_focus_draft_row = $(focus_draft_down_row).next();
+            if ($(".draft-info-box:last")[0].parentElement == next_focus_draft_row[0]) {
+                $(".drafts-list")[0].scrollTop = $('.drafts-list')[0].scrollHeight - $('.drafts-list').height();
+            }
+            if (next_focus_draft_row[0] !== undefined) {
+                next_focus_draft_row[0].children[0].focus();
+                //If the next draft is cut off, scroll more.
+                if(next_focus_draft_row.position() !== undefined)
+                    if ($(".drafts-container")[0].clientHeight - (next_focus_draft_row.position().top + next_focus_draft_row[0].clientHeight) < -4) {
+                         //-4 is a hardcoded number that represent the minimum distance from the bottom that will require extra scrolling.
+                         $(".drafts-list")[0].scrollTop = $(".drafts-list")[0].scrollTop + 2 -
+                         ($(".drafts-container")[0].clientHeight - (next_focus_draft_row.position().top + next_focus_draft_row[0].clientHeight));
+                    }
+                }
+                e.preventDefault();
+        }
+    }
+ 
+    //Allows user to delete drafts with backspace
+    if (event_name === 'backspace') {
+        if($("#draft_overlay").hasClass("show")) {
+            var draft_backspace = drafts.draft_model.get();
+            var actele = document.activeElement;
+            if (actele.parentElement.hasAttribute("data-draft-id")) {
+                var focused_draft = $(actele.parentElement)[0].getAttribute("data-draft-id");
+                var focus_draft_back_row = $(actele)[0].parentElement;
+                var backnext_focus_draft_row = $(focus_draft_back_row).next();
+                var backprev_focus_draft_row = $(focus_draft_back_row).prev();
+                var delete_id; 
+                if (backnext_focus_draft_row[0] !== undefined) {
+                    delete_id = backnext_focus_draft_row[0].getAttribute("data-draft-id");
+                } else if (backprev_focus_draft_row[0] !== undefined) {
+                    delete_id = backprev_focus_draft_row[0].getAttribute("data-draft-id");
+                }
+                
+                drafts.draft_model.deleteDraft(focused_draft);
+                document.activeElement.parentElement.remove();
+                
+                var new_focus_element = document.querySelectorAll('[data-draft-id="' + delete_id + '"]');
+                if (new_focus_element[0] !== undefined) {
+                    new_focus_element[0].children[0].focus();
+                }
+           
+                if ($("#drafts_table .draft-row").length === 0) {
+                    $('#drafts_table .no-drafts').show();
+                }
+                return true;
+            }
+        }
+    }
+    
     if (hotkey.message_view_only && ui_state.home_tab_obscured()) {
         return false;
     }
@@ -422,7 +535,7 @@ exports.process_hotkey = function (e, hotkey) {
             return true;
         }
     }
-
+   
     if ((actions_dropdown_hotkeys.indexOf(event_name) !== -1) && popovers.actions_popped()) {
         popovers.actions_menu_handle_keyboard(event_name);
         return true;
@@ -518,6 +631,9 @@ exports.process_hotkey = function (e, hotkey) {
             return true;
         case 'stream_cycle_forward':
             navigate.cycle_stream('forward');
+            return true;
+        case 'open_drafts':
+            drafts.open();
             return true;
     }
 
